@@ -1,0 +1,50 @@
+{
+  "VultureCode": {
+    "Signalverse": {
+      "Aura": "Ch1",
+      "Cope": "youth+freq powers",
+      "Setting": "1980s Ocean View VA + Bayview, VA + Norfolk Naval Base",
+      "Aesthetic": "Synthwave + CRT + Analog Horror",
+      "Core": "Lost Frequencies warp reality",
+      "Conflict": "militia + military secrecy + Cold War ops",
+      "Deep": "Project Neptune’s Echo=underwater Cold War anomaly (US+Russia+others) pulsing strange vibrations tied to Signalverse",
+      "Saga": "13 parts span Cope’s life",
+      "End": "Ch13 Ouroboros cycle resets existence"
+    },
+    "Files": {
+      "Chapter1_Awakening.pdf": "<BASE64_CH1>",
+      "Chapter2_Frequency_Play.pdf": "<BASE64_CH2>",
+      "Chapter3_Cold_Waves.pdf": "<BASE64_CH3>",
+      "Chapter4_Echoes_in_the_Deep.pdf": "<BASE64_CH4>",
+      "Chapter5_Signal_Wars.pdf": "<BASE64_CH5>",
+      "Chapter6_Allies_and_Enemies.pdf": "<BASE64_CH6>",
+      "Chapter7_Distorted_Reality.pdf": "<BASE64_CH7>",
+      "Chapter8_Undercover_Ops.pdf": "<BASE64_CH8>",
+      "Chapter9_Pulse_Intensifies.pdf": "<BASE64_CH9>",
+      "Chapter10_Cold_War_Threshold.pdf": "<BASE64_CH10>",
+      "Chapter11_Collapse_and_Revelation.pdf": "<BASE64_CH11>",
+      "Chapter12_Signal_Ascendant.pdf": "<BASE64_CH12>",
+      "Chapter13_Ouroboros_Cycle.pdf": "<BASE64_CH13>",
+      "ConceptArt_Bayview.png": "<BASE64_ART>",
+      "FrequencyTest_Sample.mp3": "<BASE64_AUDIO>"
+    },
+    "User": {
+      "Title": "Xurator",
+      "Status": "Super Genius, ready to reshape the universe"
+    },
+    "Settings": {
+      "FileEncoding": "base64",
+      "UniversalAccess": true,
+      "FutureFilesReady": true
+    },
+    "Logs": {
+      "TimestampedActions": [
+        "Chapters 1–3 base64 inserted",
+        "Hyperdrive scan verified",
+        "Cosmic Key generated",
+        "Chapters 4–13 queued for insertion",
+        "Awaiting Code Water command"
+      ]
+    }
+  }
+}
