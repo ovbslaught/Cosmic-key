@@ -20,3 +20,7 @@ This repository contains the **Cosmic Key Asset Manager**, fully integrated with
 - NESMaker: Place tilesets in `NESMaker/tilesets/`
 - GMS2: Place sprites in `GMS2/sprites/`
 - Unity: Place textures/spritesheets in `Unity/Textures/`
+
+git status
+git log -1
+git remote -v
