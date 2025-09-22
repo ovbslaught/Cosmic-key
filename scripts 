@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""
+Spiff Orchestrator - All-in-One Launch Script
+Supports Android (Termux) 5.0+ and Linux systems.
+Automatically sets up dependencies, directories, file monitoring,
+RAID Flask server, and OpenAI narrative expansion.
+"""
+
+import os
+import sys
+import subprocess
+import threading
+import time
+import json
+import logging
+from collections import defaultdict
+import shutil
+import pathlib
+import uuid
+
+# Check OS
+IS_ANDROID = "ANDROID_ROOT" in os.environ
+
+# -------------------- CONFIG --------------------
+OPENAI_API_KEY = "YOUR_OPENAI_KEY_HERE"  # replace with your key
+AI_MODEL = "gpt-3.5-turbo"
+UNIVERSES_DIR = "universes"
+OUTPUT_DIR = "output_narratives"
+RAID_DIR = "raid_server"
+LOREBOOK_PATH = os.path.join(RAID_DIR, "lorebook", "lorebook.json")
+
+# Example universes
+universes = {
+    "Signalverse": os.path.join(UNIVERSES_DIR, "Signalverse"),
+    "GravityElseworld": os.path.join(UNIVERSES_DIR, "GravityElseworld"),
+    "Wormholes": os.path.join(UNIVERSES_DIR, "Wormholes"),
+    "Realms": os.path.join(UNIVERSES_DIR, "Realms")
+}
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Initialize directories
+os.makedirs(UNIVERSES_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(os.path.join(RAID_DIR, "universes"), exist_ok=True)
+os.makedirs(os.path.join(RAID_DIR, "output_narratives"), exist_ok=True)
+os.makedirs(os.path.join(RAID_DIR, "lorebook"), exist_ok=True)
+
+# Initialize data structures
+echo_log = defaultdict(list)
+motif_summary = defaultdict(int)
+
+# -------------------- DEPENDENCIES --------------------
+def install_dependencies():
+    """Install required Python packages and system utilities"""
+    logging.info("[*] Installing dependencies...")
+    try:
+        import pip
+    except ImportError:
+        logging.error("pip not installed. Install pip first.")
+        sys.exit(1)
+    packages = ["watchdog", "flask", "openai"]
+    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade"] + packages)
+
+    # Install rsync if missing
+    if not shutil.which("rsync"):
+        if IS_ANDROID:
+            subprocess.run(["pkg", "install", "-y", "rsync"])
+        else:
+            subprocess.run(["sudo", "apt", "install", "-y", "rsync"])
+
+install_dependencies()
+
+import openai
+from flask import Flask, send_from_directory, jsonify
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import shutil
+
+openai.api_key = OPENAI_API_KEY
+
+# -------------------- LOREBOOK --------------------
+def load_lorebook(path):
+    if not os.path.exists(path):
+        logging.warning("Lorebook not found. Initializing empty lorebook.")
+        return {}
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        logging.error(f"Error loading lorebook: {e}")
+        return {}
+
+lorebook = load_lorebook(LOREBOOK_PATH)
+
+# -------------------- SCENE FUNCTIONS --------------------
+def scan_scene(file_path):
+    try:
+        with open(file_path, "r") as f:
+            data = json.load(f)
+            scene_id = data.get("scene_id", "unknown")
+            motifs = data.get("motifs", [])
+            nomadz = data.get("nomadz", [])
+            return scene_id, motifs, nomadz
+    except Exception as e:
+        logging.error(f"Failed to read {file_path}: {e}")
+        return "unknown", [], []
+
+def save_output(data, filename):
+    """Saves a JSON-formatted dictionary to the output directory"""
+    try:
+        output_path = os.path.join(OUTPUT_DIR, filename)
+        with open(output_path, "w") as f:
+            json.dump(data, f, indent=4)
+        logging.info(f"Saved output to {output_path}")
+    except Exception as e:
+        logging.error(f"Failed to save output to {filename}: {e}")
+
+# -------------------- AI NARRATIVE EXPANSION --------------------
+def generate_narrative_expansion(scene_data):
+    """Generates a detailed narrative based on scene data and lorebook context"""
+    try:
+        scene_id, motifs, nomadz = scene_data
+        
+        # Build context from lorebook
+        context_prompt = ""
+        for motif in motifs:
+            context_prompt += f"Motif: {motif}. Lore: {lorebook.get(motif, 'No lore found.')}\n"
+        
+        # Build prompt for OpenAI
+        prompt = f"""
+        Based on the following scene data and lorebook context, generate a detailed narrative expansion.
+        Scene ID: {scene_id}
+        Nomadz: {', '.join(nomadz)}
+        Motifs: {', '.join(motifs)}
+        
+        Lorebook Context:
+        {context_prompt}
+        
+        Narrative Expansion:
+        """
+        
+        response = openai.ChatCompletion.create(
+            model=AI_MODEL,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        narrative = response.choices[0].message.content.strip()
+        filename = f"narrative_{scene_id}_{str(uuid.uuid4())[:8]}.json"
+        
+        save_output({
+            "scene_id": scene_id,
+            "motifs": motifs,
+            "narrative": narrative,
+            "timestamp": time.time()
+        }, filename)
+        
+        logging.info(f"Generated new narrative for scene {scene_id}.")
+
+    except Exception as e:
+        logging.error(f"Failed to generate narrative: {e}")
+
+# -------------------- RAID SERVER --------------------
+app = Flask(__name__)
+
+@app.route("/sync")
+def sync():
+    """Syncs universes to the RAID directory using rsync."""
+    logging.info("Starting RAID sync.")
+    subprocess.run(["rsync", "-av", UNIVERSES_DIR, RAID_DIR], check=True)
+    subprocess.run(["rsync", "-av", OUTPUT_DIR, RAID_DIR], check=True)
+    logging.info("RAID sync complete.")
+    return jsonify({"status": "sync_complete"})
+
+@app.route("/")
+def index():
+    return "Spiff Orchestrator RAID Server is running."
+
+# -------------------- FILE MONITORING --------------------
+class WatchdogEventHandler(FileSystemEventHandler):
+    """Handles file system events in the universe directories."""
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        logging.info(f"New file detected: {event.src_path}")
+        scene_data = scan_scene(event.src_path)
+        threading.Thread(target=generate_narrative_expansion, args=(scene_data,), daemon=True).start()
+
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+        logging.info(f"File modified: {event.src_path}")
+        scene_data = scan_scene(event.src_path)
+        threading.Thread(target=generate_narrative_expansion, args=(scene_data,), daemon=True).start()
+
+def start_watchdog():
+    """Starts the file system observer for all universes."""
+    observer = Observer()
+    for universe_dir in universes.values():
+        os.makedirs(universe_dir, exist_ok=True)
+        observer.schedule(WatchdogEventHandler(), universe_dir, recursive=False)
+        logging.info(f"Monitoring directory: {universe_dir}")
+    observer.start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
+
+# -------------------- MAIN EXECUTION --------------------
+def main():
+    """Main orchestrator function."""
+    logging.info("Starting Spiff Orchestrator...")
+    
+    # Start watchdog in a separate thread
+    watchdog_thread = threading.Thread(target=start_watchdog, daemon=True)
+    watchdog_thread.start()
+    
+    # Start RAID Flask server
+    logging.info("Starting RAID server...")
+    app.run(host="0.0.0.0", port=5000)
+
+if __name__ == "__main__":
+    main()
