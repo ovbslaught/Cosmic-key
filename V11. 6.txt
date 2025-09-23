@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+
+-- coding: utf-8 --
+
+""" Cosmic Key Master v2.11 - Orchestrated Execution
+
+Full daemons for continuous running
+
+GUI auto-launch if PyQt6/Tkinter installed
+
+Headless fallback with remote listing
+
+Asset ingestion: local drives, drop_zone, Google Drive
+
+Continuous story/audio generation
+
+Logging and backup
+
+Sandbox-safe dependency warnings """
+
+import os, sys, json, uuid, shutil, time, threading from datetime import datetime
+
+---------------------------
+
+DEPENDENCY CHECK
+
+---------------------------
+
+REQUIRED_MODULES = ['psutil', 'Pillow'] GUI_MODULES = [('PyQt6', 'PyQt6'), ('tkinter', 'tk')]
+
+PSUTIL_AVAILABLE = False PIL_AVAILABLE = False GUI_FRAMEWORK = None
+
+Safe dynamic import
+
+def safe_import(module_name): try: return import(module_name) except ImportError: print(f'Warning: Module {module_name} not available.') return None
+
+psutil = safe_import('psutil') PSUTIL_AVAILABLE = psutil is not None
+
+PIL = safe_import('PIL') if PIL: try: from PIL import Image, ImageTk, ImageDraw, ImageQt PIL_AVAILABLE = True except Exception: PIL_AVAILABLE = False
+
+PyQt6 = safe_import('PyQt6') tk = safe_import('tkinter')
+
+if PyQt6: try: from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QListWidget, QPushButton, QVBoxLayout, QHBoxLayout, QFileDialog, QListWidgetItem from PyQt6.QtGui import QPixmap from PyQt6.QtCore import Qt GUI_FRAMEWORK = 'PyQt6' except Exception: PyQt6 = None
+
+if not GUI_FRAMEWORK and tk: try: import tkinter as tk from tkinter import filedialog, simpledialog, LEFT, RIGHT, Y, BOTH, SINGLE, BOTTOM GUI_FRAMEWORK = 'Tkinter' except Exception: tk = None
+
+---------------------------
+
+FOLDER STRUCTURE
+
+---------------------------
+
+BASE_DIR = os.path.expanduser('~/CosmicKey') DROP_ZONE = os.path.join(BASE_DIR, 'drop_zone') SCRIPTS_DIR = os.path.join(BASE_DIR, 'scripts') PROJECTS_DIR = os.path.join(BASE_DIR, 'projects') MEDIA_DIR = os.path.join
+

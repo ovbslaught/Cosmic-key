@@ -1,0 +1,104 @@
+import os, shutil, subprocess
+from pathlib import Path
+
+# ==== CONFIG ====
+BASE_DIR = Path(__file__).parent.resolve()
+DIST_DIR = BASE_DIR / "dist"
+LAUNCHERS_DIR = BASE_DIR / "launchers"
+UNIVERSE_DIR = BASE_DIR / "universe_data"
+MEDIA_DIR = BASE_DIR / "media"
+COSMIC_EXE_NAME = "cosmickey_ai.exe"
+PYINSTALLER_FLAGS = [
+    "--onefile",
+    "--windowed",
+    f"--add-data {UNIVERSE_DIR};universe_data",
+    f"--add-data {MEDIA_DIR};media"
+]
+
+# ==== STEP 0: Create folder structure ====
+for folder in [DIST_DIR, LAUNCHERS_DIR, UNIVERSE_DIR, MEDIA_DIR]:
+    folder.mkdir(exist_ok=True)
+
+# ==== STEP 1: Build the .exe ====
+print("[*] Building Cosmic Key executable...")
+pyinstaller_cmd = ["pyinstaller"] + PYINSTALLER_FLAGS + ["cosmickey_ai.py"]
+subprocess.run(pyinstaller_cmd, check=True)
+print(f"[+] Executable created in {DIST_DIR}")
+
+# ==== STEP 2: Create cloud launcher ====
+CLOUD_LAUNCHER_PY = LAUNCHERS_DIR / "cosmickey_cloud_launcher.py"
+CLOUD_LAUNCHER_BAT = LAUNCHERS_DIR / "launch_cosmickey_cloud.bat"
+
+cloud_launcher_content = f"""
+import os, shutil, subprocess
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EXE_PATH = os.path.join(BASE_DIR, "..", "dist", "{COSMIC_EXE_NAME}")
+
+# TODO: Set your cloud folders
+CLOUD_UNIVERSE = os.path.expanduser("C:/Users/YourUser/OneDrive/CosmicKey/universe_data")
+CLOUD_MEDIA = os.path.expanduser("C:/Users/YourUser/OneDrive/CosmicKey/media")
+
+EXE_UNIVERSE = os.path.join(BASE_DIR, "..", "dist", "universe_data")
+EXE_MEDIA = os.path.join(BASE_DIR, "..", "dist", "media")
+
+def sync_folder(src, dest):
+    if not os.path.exists(src):
+        return
+    os.makedirs(dest, exist_ok=True)
+    for item in os.listdir(src):
+        s_path = os.path.join(src, item)
+        d_path = os.path.join(dest, item)
+        if os.path.isdir(s_path):
+            sync_folder(s_path, d_path)
+        else:
+            shutil.copy2(s_path, d_path)
+
+def update_from_cloud():
+    print("[*] Syncing universes and media from cloud...")
+    sync_folder(CLOUD_UNIVERSE, EXE_UNIVERSE)
+    sync_folder(CLOUD_MEDIA, EXE_MEDIA)
+    print("[*] Cloud sync complete.")
+
+def launch_app():
+    print("[*] Launching Cosmic Key...")
+    subprocess.Popen([EXE_PATH], shell=True)
+
+if __name__ == "__main__":
+    update_from_cloud()
+    launch_app()
+    print("[*] Cosmic Key launched with latest cloud data.")
+"""
+
+CLOUD_LAUNCHER_BAT_CONTENT = f"""@echo off
+cd /d "%~dp0"
+python "{CLOUD_LAUNCHER_PY.name}"
+pause
+"""
+
+CLOUD_LAUNCHER_PY.write_text(cloud_launcher_content.strip(), encoding="utf-8")
+CLOUD_LAUNCHER_BAT.write_text(CLOUD_LAUNCHER_BAT_CONTENT.strip(), encoding="utf-8")
+
+print(f"[+] Cloud launcher created in {LAUNCHERS_DIR}")
+print("[*] Ultimate Cosmic Key setup complete!")
+print("[*] Run launchers/launch_cosmickey_cloud.bat to launch your app.")
+# ==== STEP 3: Create Desktop Shortcut ====
+try:
+    import pythoncom
+    from win32com.shell import shell, shellcon
+    from win32com.client import Dispatch
+
+    desktop_path = shell.SHGetFolderPath(0, shellcon.CSIDL_DESKTOP, None, 0)
+    shortcut_path = os.path.join(desktop_path, "CosmicKey Launcher.lnk")
+    target = CLOUD_LAUNCHER_BAT
+
+    shell = Dispatch('WScript.Shell')
+    shortcut = shell.CreateShortCut(shortcut_path)
+    shortcut.Targetpath = str(target)
+    shortcut.WorkingDirectory = str(LAUNCHERS_DIR)
+    shortcut.WindowStyle = 1
+    shortcut.IconLocation = str(DIST_DIR / COSMIC_EXE_NAME)
+    shortcut.save()
+    print(f"[+] Desktop shortcut created at {shortcut_path}")
+except Exception as e:
+    print(f"[!] Could not create deskto
