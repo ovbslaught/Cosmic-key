@@ -12,7 +12,8 @@ echo [2] Sync to GitHub
 echo [3] Sync to GitLab
 echo [4] Push TO Wormhole (Repo -> Drive)
 echo [5] Import FROM Wormhole (Drive -> Repo)
-echo [6] System Status Check
+echo [6] Awaken (Harvest Knowledge from Data)
+echo [7] System Status Check
 echo.
 set /p choice="Select activation mode: "
 if "%choice%"=="1" goto webapp
@@ -20,7 +21,8 @@ if "%choice%"=="2" goto github
 if "%choice%"=="3" goto gitlab
 if "%choice%"=="4" goto pushtowormhole
 if "%choice%"=="5" goto importfromwormhole
-if "%choice%"=="6" goto status
+if "%choice%"=="6" goto awaken
+if "%choice%"=="7" goto status
 goto end
 
 :webapp
@@ -65,6 +67,13 @@ set /p source="Enter full path to Wormhole folder (e.g. D:\Drive\Wormhole\cosmic
 powershell -File "%~dp0import_from_wormhole.ps1" -SourceDriveDir "%source%"
 echo.
 echo Don't forget to commit the new data!
+pause
+goto end
+
+:awaken
+echo.
+echo Initiating Knowledge Harvest...
+python "%~dp0knowledge_harvester.py"
 pause
 goto end
 
