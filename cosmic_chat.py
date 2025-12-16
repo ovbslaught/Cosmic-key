@@ -140,6 +140,16 @@ class CosmicChat:
 
     def chat_loop(self):
         print("\n=== COSMIC CHAT MATRIX ===")
+
+        # Check if we have ANY keys
+        if not self.api_keys:
+            print("\n[!] NO API KEYS FOUND.")
+            print("To enable AI chat, you need to configure your API keys.")
+            print("1. Run 'DEPLOY_UNIFIED.bat' and select Option [8] Setup.")
+            print("2. Or manually add keys to your 'keyz' folder.")
+            input("\nPress Enter to exit...")
+            return
+
         print("Select Provider:")
         available_indices = []
         for pid, p in PROVIDERS.items():
@@ -158,9 +168,9 @@ class CosmicChat:
         print(f"\nInitializing link to {provider['name']}...")
 
         if not self.api_keys.get(provider["env_var"]):
-            print(
-                f"WARNING: Key ({provider['env_var']}) missing. Please add it to your KEYZ folder and run Setup."
-            )
+            print(f"WARNING: Key ({provider['env_var']}) missing.")
+            print("Please run Option [8] (Setup) in the main menu to configure it.")
+            input("Press Enter to continue...")
             return
 
         print("Connection established. Type 'exit' to quit.\n")

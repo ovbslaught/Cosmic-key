@@ -130,5 +130,20 @@ if __name__ == "__main__":
             else:
                 with open(gitignore, "w") as gf:
                     gf.write(".env\n")
+        else:
+            print("No keys found in the target folder.")
+            create_dummy = input(
+                "Would you like to generate dummy key files in a local 'keyz' folder? (y/n): "
+            )
+            if create_dummy.lower() == "y":
+                local_keyz = os.path.join(PROJECT_ROOT, "keyz")
+                os.makedirs(local_keyz, exist_ok=True)
+                for filename, env_var in KEY_MAPPING.items():
+                    with open(os.path.join(local_keyz, filename), "w") as f:
+                        f.write(f"PLACE_{env_var}_HERE")
+                print(
+                    f"Created template files in {local_keyz}. Please edit them and run Setup again."
+                )
+
     else:
         print("No valid KEYZ path provided.")

@@ -4,7 +4,7 @@ import time
 import subprocess
 import sys
 import logging
-# from datetime import datetime # unused
+from datetime import datetime
 
 # Configuration
 LOG_FILE = "cosmic_watchdog.log"
@@ -35,10 +35,12 @@ class CosmicWatchdog:
                     # self.log(f"{name} is running.")
                     pass
                 else:
-                    self.log(f"ALERT: {name} is NOT running.")
+                    self.log(f"ALERT: {name} ({exe}) is NOT running.")
                     # self.restart_service(name) # Auto-restart logic would go here
         except Exception as e:
             self.log(f"Error checking services: {e}")
+            with open("watchdog_error.log", "a") as f:
+                f.write(f"{datetime.now()}: {e}\n")
 
     def run_code_snippet(self, code_str):
         """Ability for system to run its own code safely-ish."""

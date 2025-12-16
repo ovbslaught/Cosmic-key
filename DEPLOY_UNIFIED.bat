@@ -18,8 +18,10 @@ echo [9] Launch Cosmic Watchdog (Daemon)
 echo [10] Cosmic Chat (Unified AI Matrix)
 echo [11] Open in VS Code (Antigravity Mode)
 echo [12] System Status Check
+echo [0] IGNITION (Launch All Systems)
 echo.
 set /p choice="Select activation mode: "
+if "%choice%"=="0" goto ignition
 if "%choice%"=="1" goto webapp
 if "%choice%"=="2" goto github
 if "%choice%"=="3" goto gitlab
@@ -32,6 +34,10 @@ if "%choice%"=="9" goto watchdog
 if "%choice%"=="10" goto chat
 if "%choice%"=="11" goto vscode
 if "%choice%"=="12" goto status
+goto end
+
+:ignition
+call "%~dp0IGNITION.bat"
 goto end
 
 :webapp
