@@ -1,0 +1,182 @@
+name: Wormhole Sync for Cosmic-key
+
+on:
+  schedule:
+    # Run every 6 hours to sync with Google Drive wormhole
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force full sync (ignore incremental)'
+        type: boolean
+        default: false
+      sync_direction:
+        description: 'Sync direction'
+        type: choice
+        options:
+          - 'drive-to-repo'
+          - 'repo-to-drive'
+          - 'bidirectional'
+        default: 'drive-to-repo'
+  push:
+    branches:
+      - main
+    paths:
+      - 'App_Data/**'
+      - 'Controllers/**'
+      - 'Cosmic Vault/**'
+
+jobs:
+  sync-wormhole:
+    name: Sync Cosmic-key with Wormhole
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Setup rclone
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
+          rclone version
+          
+      - name: Configure rclone for Google Drive
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << 'EOF'
+          [gdrive]
+          type = drive
+          scope = drive
+          service_account_file = /tmp/gdrive-sa.json
+          root_folder_id = 1VSH08EzxY0Knni5HKUaHePTliUAKxfWh
+          EOF
+          
+          # Create service account file from secret
+          echo '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > /tmp/gdrive-sa.json
+          chmod 600 /tmp/gdrive-sa.json
+          
+      - name: Sync from Drive to Repository
+        if: github.event.inputs.sync_direction != 'repo-to-drive'
+        run: |
+          echo "🌀 Syncing from Google Drive wormhole to Cosmic-key..."
+          
+          # Define sync paths for Cosmic-key specific folders
+          SYNC_PATHS=(
+            "Cosmic-key/App_Data"
+            "Cosmic-key/Controllers"
+            "Cosmic-key/Cosmic Vault"
+            "Cosmic-key/audio"
+            "Cosmic-key/graphics"
+            "Cosmic-key/scripts"
+          )
+          
+          # Sync each path from Drive
+          for path in "${SYNC_PATHS[@]}"; do
+            folder_name=$(basename "$path")
+            echo "📁 Syncing $folder_name from Drive..."
+            
+            rclone sync "gdrive:wormhole/$path" "./$folder_name" \
+              --verbose \
+              --checksum \
+              --exclude '.git/**' \
+              --exclude 'node_modules/**' \
+              --exclude '__pycache__/**' \
+              --exclude '*.pyc' \
+              --exclude '.DS_Store'
+          done
+          
+          echo "✅ Drive to repo sync complete!"
+          
+      - name: Sync from Repository to Drive
+        if: github.event.inputs.sync_direction == 'repo-to-drive' || github.event.inputs.sync_direction == 'bidirectional'
+        run: |
+          echo "🌀 Syncing from Cosmic-key repository to Google Drive wormhole..."
+          
+          # Sync repository folders to Drive
+          REPO_PATHS=(
+            "App_Data"
+            "Controllers"
+            "Cosmic Vault"
+            "audio"
+            "graphics"
+            "scripts"
+          )
+          
+          for folder in "${REPO_PATHS[@]}"; do
+            if [ -d "./$folder" ]; then
+              echo "📤 Syncing $folder to Drive..."
+              rclone sync "./$folder" "gdrive:wormhole/Cosmic-key/$folder" \
+                --verbose \
+                --checksum \
+                --exclude '.git/**'
+            fi
+          done
+          
+          echo "✅ Repo to Drive sync complete!"
+          
+      - name: Configure Git
+        run: |
+          git config user.name "Cosmic-key Wormhole Sync"
+          git config user.email "ovbslaught@gmail.com"
+          
+      - name: Commit and push changes from Drive
+        run: |
+          git add -A
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+            git commit -m "🌀 Wormhole sync: $TIMESTAMP
+
+Synced from Google Drive wormhole folder
+- Cosmic-key data updates
+- Mixed project assets
+- Knowledge base content
+
+Automated sync via GitHub Actions"
+            
+            git push origin ${{ github.ref_name }}
+            echo "✅ Changes pushed successfully"
+          fi
+          
+      - name: Generate sync report
+        if: always()
+        run: |
+          echo "## 🌀 Cosmic-key Wormhole Sync Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository:** Cosmic-key" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Sync Direction:** ${{ github.event.inputs.sync_direction || 'drive-to-repo (auto)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -d ".git" ]; then
+            echo "### 📝 Recent Changes" >> $GITHUB_STEP_SUMMARY
+            git log -5 --pretty=format:"- %s (%ar)" >> $GITHUB_STEP_SUMMARY || echo "No recent commits" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📂 Synced Directories" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 App_Data (application data)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎮 Controllers (game controllers)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌌 Cosmic Vault (dashboards and configs)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎵 audio (sound assets)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎨 graphics (visual assets)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📜 scripts (automation scripts)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*Wormhole sync completed successfully* ✨" >> $GITHUB_STEP_SUMMARY
+          
+      - name: Cleanup sensitive data
+        if: always()
+        run: |
+          rm -f /tmp/gdrive-sa.json
+          echo "✅ Cleanup complete"
