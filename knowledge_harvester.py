@@ -47,18 +47,6 @@ def harvest_knowledge():
     files_scanned = 0
 
     print("Beginning Deep Scan of project structure (recursively)...")
-
-    for root, dirs, files in os.walk(os.getcwd()):
-        # Filter directories - Skip heavy build folders
-        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
-
-        for file in files:
-            ext = os.path.splitext(file)[1].lower()
-            # Added CSV support
-            if ext in TEXT_EXTENSIONS or ext == ".csv":
-                files_scanned += 1
-                try:
-                    path = os.path.join(root, file)
                     content = ""
 
                     if ext == ".csv":

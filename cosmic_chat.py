@@ -138,6 +138,24 @@ class CosmicChat:
         except Exception as e:
             return f"Error: {e}"
 
+    def log_to_vault(self, provider_name, user_text, ai_response):
+        """Logs the conversation to the Obsidian Vault for sync."""
+        vault_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "Cosmic Vault", "Cosmic Chat.md"
+        )
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry = f"\n\n#### {timestamp} | {provider_name}\n**You**: {user_text}\n\n**Cosmic**: {ai_response}\n\n---"
+
+        try:
+            # Ensure folder exists (just in case)
+            os.makedirs(os.path.dirname(vault_path), exist_ok=True)
+
+            with open(vault_path, "a", encoding="utf-8") as f:
+                f.write(entry)
+        except Exception as e:
+            print(f"[Log Error]: {e}")
+
     def chat_loop(self):
         print("\n=== COSMIC CHAT MATRIX ===")
 
@@ -191,6 +209,9 @@ class CosmicChat:
             # Clear thinking line
             print(" " * 20, end="\r")
             print(f"Cosmic Key > {response}\n")
+
+            # Log to Obsidian
+            self.log_to_vault(provider["name"], user_input, response)
 
 
 if __name__ == "__main__":
