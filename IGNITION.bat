@@ -21,6 +21,11 @@ start "Cosmic Watchdog" python "%~dp0cosmic_watchdog.py" --active
 
 timeout /t 1 /nobreak >nul
 
+echo [2.5/3] Bridging to Obsidian...
+start "Obsidian Bridge" python "%~dp0obsidian_bridge.py"
+
+timeout /t 1 /nobreak >nul
+
 echo [3/3] Opening Cosmic Chat Matrix...
 start "Cosmic Chat" python "%~dp0cosmic_chat.py"
 

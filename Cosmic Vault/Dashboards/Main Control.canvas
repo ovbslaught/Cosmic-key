@@ -1,0 +1,32 @@
+{
+	"nodes": [
+		{
+			"id": "node_status",
+			"x": -200,
+			"y": -140,
+			"width": 400,
+			"height": 400,
+			"type": "file",
+			"file": "System Status.md"
+		},
+		{
+			"id": "node_chat",
+			"x": 240,
+			"y": -140,
+			"width": 400,
+			"height": 600,
+			"type": "file",
+			"file": "Cosmic Chat.md"
+		},
+		{
+			"id": "node_title",
+			"x": -200,
+			"y": -240,
+			"width": 840,
+			"height": 60,
+			"type": "text",
+			"text": "# 🌌 Cosmic Key OS - Main Control"
+		}
+	],
+	"edges": []
+}
