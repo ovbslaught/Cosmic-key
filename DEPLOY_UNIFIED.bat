@@ -9,14 +9,18 @@ echo  ================================================
 echo.
 echo [1] Launch Web Application (IIS Express)
 echo [2] Sync to GitHub
-echo [3] Sync to Wormhole (Drive)
-echo [4] System Status Check
+echo [3] Sync to GitLab
+echo [4] Push TO Wormhole (Repo -> Drive)
+echo [5] Import FROM Wormhole (Drive -> Repo)
+echo [6] System Status Check
 echo.
 set /p choice="Select activation mode: "
 if "%choice%"=="1" goto webapp
 if "%choice%"=="2" goto github
-if "%choice%"=="3" goto wormhole
-if "%choice%"=="4" goto status
+if "%choice%"=="3" goto gitlab
+if "%choice%"=="4" goto pushtowormhole
+if "%choice%"=="5" goto importfromwormhole
+if "%choice%"=="6" goto status
 goto end
 
 :webapp
@@ -35,15 +39,32 @@ goto end
 :github
 echo.
 echo Syncing to GitHub...
-git push -u origin master
+git push -u origin main
 pause
 goto end
 
-:wormhole
+:gitlab
 echo.
-echo Syncing to Wormhole...
+echo Syncing to GitLab...
+git push -u gitlab main
+pause
+goto end
+
+:pushtowormhole
+echo.
+echo Syncing Repo -> Wormhole...
 set /p target="Enter full path to Wormhole folder (e.g. D:\Drive\Wormhole): "
 powershell -File "%~dp0sync_to_wormhole.ps1" -TargetDir "%target%\cosmic-key"
+pause
+goto end
+
+:importfromwormhole
+echo.
+echo Integrating Drive Data -> Repo...
+set /p source="Enter full path to Wormhole folder (e.g. D:\Drive\Wormhole\cosmic-key): "
+powershell -File "%~dp0import_from_wormhole.ps1" -SourceDriveDir "%source%"
+echo.
+echo Don't forget to commit the new data!
 pause
 goto end
 
