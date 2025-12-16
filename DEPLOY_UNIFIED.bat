@@ -12,9 +12,11 @@ echo [2] Sync to GitHub
 echo [3] Sync to GitLab
 echo [4] Push TO Wormhole (Repo -> Drive)
 echo [5] Import FROM Wormhole (Drive -> Repo)
-echo [6] Awaken (Harvest Knowledge from Data)
 echo [7] Organize Raw Data (Dedupe & Sort)
-echo [8] System Status Check
+echo [8] Setup System (Keys, MCP, Environment)
+echo [9] Launch Cosmic Watchdog (Daemon)
+echo [10] Open in VS Code (Antigravity Mode)
+echo [11] System Status Check
 echo.
 set /p choice="Select activation mode: "
 if "%choice%"=="1" goto webapp
@@ -24,7 +26,10 @@ if "%choice%"=="4" goto pushtowormhole
 if "%choice%"=="5" goto importfromwormhole
 if "%choice%"=="6" goto awaken
 if "%choice%"=="7" goto sortdata
-if "%choice%"=="8" goto status
+if "%choice%"=="8" goto setup
+if "%choice%"=="9" goto watchdog
+if "%choice%"=="10" goto vscode
+if "%choice%"=="11" goto status
 goto end
 
 :webapp
@@ -87,6 +92,27 @@ set /p rawpath="Enter full path to source folder (Press Enter to check local pro
 if "%rawpath%"=="" set rawpath=%~dp0temporal_raw_data
 python "%~dp0temporal_sorter.py" "%rawpath%"
 pause
+goto end
+
+:setup
+echo.
+echo Setting up Credentials and MCP...
+echo Trying to locate KEYZ in project or simple search...
+python "%~dp0setup_mcp.py"
+pause
+goto end
+
+:watchdog
+echo.
+echo Launching Cosmic Watchdog...
+start "Cosmic Watchdog" python "%~dp0cosmic_watchdog.py" --active
+pause
+goto end
+
+:vscode
+echo.
+echo Opening VS Code...
+code "%~dp0"
 goto end
 
 :status
