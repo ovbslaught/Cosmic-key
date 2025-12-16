@@ -12,6 +12,12 @@ KEY_MAPPING = {
     "gemini api key.txt": "GEMINI_API_KEY",
     "ollamaapikey.txt": "OLLAMA_API_KEY",
     "openrouter api key.txt": "OPENROUTER_API_KEY",
+    "perplexity api key.txt": "PERPLEXITY_API_KEY",
+    "grok api key.txt": "GROK_API_KEY",
+    "xai api key.txt": "GROK_API_KEY",
+    "mistral api key.txt": "MISTRAL_API_KEY",
+    "deepseek api key.txt": "DEEPSEEK_API_KEY",
+    "anthropic api key.txt": "ANTHROPIC_API_KEY",
     "Elevenlabs api.txt": "ELEVENLABS_API_KEY",
     "Docker key.txt": "DOCKER_AUTH_KEY",
 }

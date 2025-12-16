@@ -15,8 +15,9 @@ echo [5] Import FROM Wormhole (Drive -> Repo)
 echo [7] Organize Raw Data (Dedupe & Sort)
 echo [8] Setup System (Keys, MCP, Environment)
 echo [9] Launch Cosmic Watchdog (Daemon)
-echo [10] Open in VS Code (Antigravity Mode)
-echo [11] System Status Check
+echo [10] Cosmic Chat (Unified AI Matrix)
+echo [11] Open in VS Code (Antigravity Mode)
+echo [12] System Status Check
 echo.
 set /p choice="Select activation mode: "
 if "%choice%"=="1" goto webapp
@@ -28,8 +29,9 @@ if "%choice%"=="6" goto awaken
 if "%choice%"=="7" goto sortdata
 if "%choice%"=="8" goto setup
 if "%choice%"=="9" goto watchdog
-if "%choice%"=="10" goto vscode
-if "%choice%"=="11" goto status
+if "%choice%"=="10" goto chat
+if "%choice%"=="11" goto vscode
+if "%choice%"=="12" goto status
 goto end
 
 :webapp
@@ -106,6 +108,13 @@ goto end
 echo.
 echo Launching Cosmic Watchdog...
 start "Cosmic Watchdog" python "%~dp0cosmic_watchdog.py" --active
+pause
+goto end
+
+:chat
+echo.
+echo Entering Cosmic Chat Matrix...
+python "%~dp0cosmic_chat.py"
 pause
 goto end
 
