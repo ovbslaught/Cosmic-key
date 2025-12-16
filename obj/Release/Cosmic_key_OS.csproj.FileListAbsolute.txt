@@ -1,0 +1,11 @@
+C:\runnerapps\Cosmic key OS\bin\runnerDotNet.dll
+C:\runnerapps\Cosmic key OS\bin\runnerDotNet.pdb
+C:\runnerapps\Cosmic key OS\bin\mscorlib.dll
+C:\runnerapps\Cosmic key OS\bin\normidna.nlp
+C:\runnerapps\Cosmic key OS\bin\normnfc.nlp
+C:\runnerapps\Cosmic key OS\bin\normnfd.nlp
+C:\runnerapps\Cosmic key OS\bin\normnfkc.nlp
+C:\runnerapps\Cosmic key OS\bin\normnfkd.nlp
+C:\runnerapps\Cosmic key OS\obj\Release\Cosmic_key_OS.csprojResolveAssemblyReference.cache
+C:\runnerapps\Cosmic key OS\obj\Release\runnerDotNet.dll
+C:\runnerapps\Cosmic key OS\obj\Release\runnerDotNet.pdb

@@ -1,0 +1,1092 @@
+"""
+Cosmic Key - Meta Memory Log & Creative Project Manager
+A comprehensive tool for writers, musicians, and game designers
+Version 2.0 - Refactored and Production-Ready
+"""
+
+import sys
+import os
+import datetime
+import sqlite3
+import json
+import re
+import hashlib
+import logging
+from pathlib import Path
+from typing import List, Dict, Tuple, Optional
+
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QTabWidget, QWidget, 
+    QVBoxLayout, QLabel, QTextEdit, QPushButton, 
+    QLineEdit, QHBoxLayout, QGroupBox, QGridLayout, 
+    QComboBox, QMessageBox, QFileDialog, QProgressBar
+)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+
+# Optional MIDI support
+try:
+    import mido
+    MIDO_AVAILABLE = True
+except ImportError:
+    MIDO_AVAILABLE = False
+
+# --- CONFIGURATION ---
+DATABASE_FILE = "cosmic_key_data.db"
+KNOWLEDGE_BASE_FILE = "echo_knowledge_base.json"
+SETTINGS_FILE = "settings.json"
+MEDIA_ASSETS_FOLDER = "media_assets"
+PROJECTS_FOLDER = "projects"
+BACKUP_FOLDER = "backups"
+LOG_FILE = "cosmic_key.log"
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# --- UTILITY FUNCTIONS ---
+
+def ensure_directories():
+    """Create necessary directories if they don't exist."""
+    for folder in [MEDIA_ASSETS_FOLDER, PROJECTS_FOLDER, BACKUP_FOLDER]:
+        Path(folder).mkdir(parents=True, exist_ok=True)
+
+def backup_database():
+    """Create a timestamped backup of the database."""
+    if not os.path.exists(DATABASE_FILE):
+        return
+    
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(BACKUP_FOLDER, f"cosmic_key_backup_{timestamp}.db")
+    
+    try:
+        import shutil
+        shutil.copy2(DATABASE_FILE, backup_path)
+        logger.info(f"Database backed up to {backup_path}")
+        
+        # Keep only last 10 backups
+        backups = sorted(Path(BACKUP_FOLDER).glob("cosmic_key_backup_*.db"))
+        for old_backup in backups[:-10]:
+            old_backup.unlink()
+            
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+
+# --- DATABASE DAEMON ---
+
+class DatabaseDaemon:
+    """Manages all database operations with proper error handling."""
+    
+    def __init__(self, db_file: str):
+        self.db_file = db_file
+        self.conn = None
+        self.connect()
+        self.create_tables()
+    
+    def connect(self):
+        """Establish database connection with error handling."""
+        try:
+            self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row
+            logger.info("Database connection established")
+        except sqlite3.Error as e:
+            logger.error(f"Database connection error: {e}")
+            raise
+    
+    def create_tables(self):
+        """Create all necessary tables."""
+        cursor = self.conn.cursor()
+        
+        tables = {
+            'manifesto': '''
+                CREATE TABLE IF NOT EXISTS manifesto (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    entry TEXT NOT NULL
+                )
+            ''',
+            'characters': '''
+                CREATE TABLE IF NOT EXISTS characters (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    description TEXT
+                )
+            ''',
+            'timeline': '''
+                CREATE TABLE IF NOT EXISTS timeline (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    event TEXT NOT NULL
+                )
+            ''',
+            'cards': '''
+                CREATE TABLE IF NOT EXISTS cards (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    ability TEXT,
+                    resonance_cost TEXT
+                )
+            ''',
+            'projects': '''
+                CREATE TABLE IF NOT EXISTS projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    status TEXT DEFAULT 'active',
+                    timestamp TEXT NOT NULL
+                )
+            ''',
+            'operations': '''
+                CREATE TABLE IF NOT EXISTS operations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    details TEXT,
+                    timestamp TEXT NOT NULL
+                )
+            ''',
+            'continuity_log': '''
+                CREATE TABLE IF NOT EXISTS continuity_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    issue TEXT NOT NULL,
+                    resolved BOOLEAN DEFAULT 0
+                )
+            '''
+        }
+        
+        try:
+            for table_name, create_sql in tables.items():
+                cursor.execute(create_sql)
+            self.conn.commit()
+            logger.info("Database tables created/verified")
+        except sqlite3.Error as e:
+            logger.error(f"Table creation error: {e}")
+            raise
+    
+    # Manifesto operations
+    def add_manifesto_entry(self, entry: str) -> bool:
+        """Add a new manifesto entry."""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO manifesto (timestamp, entry) VALUES (?, ?)",
+                (timestamp, entry)
+            )
+            self.conn.commit()
+            logger.info(f"Manifesto entry added: {entry[:50]}...")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"Error adding manifesto entry: {e}")
+            return False
+    
+    def get_manifesto_entries(self) -> List[Tuple[str, str]]:
+        """Retrieve all manifesto entries."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT timestamp, entry FROM manifesto ORDER BY timestamp DESC")
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving manifesto entries: {e}")
+            return []
+    
+    # Character operations
+    def add_character(self, name: str, description: str) -> bool:
+        """Add a new character."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO characters (name, description) VALUES (?, ?)",
+                (name, description)
+            )
+            self.conn.commit()
+            logger.info(f"Character added: {name}")
+            return True
+        except sqlite3.IntegrityError:
+            logger.warning(f"Character already exists: {name}")
+            return False
+        except sqlite3.Error as e:
+            logger.error(f"Error adding character: {e}")
+            return False
+    
+    def get_characters(self) -> List[Tuple[str, str]]:
+        """Retrieve all characters."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT name, description FROM characters ORDER BY name")
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving characters: {e}")
+            return []
+    
+    # Timeline operations
+    def add_timeline_event(self, date: str, event: str) -> bool:
+        """Add a timeline event."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO timeline (date, event) VALUES (?, ?)",
+                (date, event)
+            )
+            self.conn.commit()
+            logger.info(f"Timeline event added: {date} - {event[:50]}...")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"Error adding timeline event: {e}")
+            return False
+    
+    def get_timeline(self) -> List[Tuple[str, str]]:
+        """Retrieve timeline events."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT date, event FROM timeline ORDER BY date")
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving timeline: {e}")
+            return []
+    
+    # Card operations
+    def add_card(self, name: str, ability: str, cost: str) -> bool:
+        """Add a new card."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO cards (name, ability, resonance_cost) VALUES (?, ?, ?)",
+                (name, ability, cost)
+            )
+            self.conn.commit()
+            logger.info(f"Card added: {name}")
+            return True
+        except sqlite3.IntegrityError:
+            logger.warning(f"Card already exists: {name}")
+            return False
+        except sqlite3.Error as e:
+            logger.error(f"Error adding card: {e}")
+            return False
+    
+    def get_cards(self) -> List[Tuple[str, str, str]]:
+        """Retrieve all cards."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT name, ability, resonance_cost FROM cards ORDER BY name")
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving cards: {e}")
+            return []
+    
+    # Project operations
+    def add_project(self, project_type: str, title: str, description: str, status: str = "active") -> bool:
+        """Add a new project."""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO projects (type, title, description, status, timestamp) VALUES (?, ?, ?, ?, ?)",
+                (project_type, title, description, status, timestamp)
+            )
+            self.conn.commit()
+            logger.info(f"Project added: {title}")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"Error adding project: {e}")
+            return False
+    
+    def get_projects(self) -> List[Tuple[str, str, str, str, str]]:
+        """Retrieve all projects."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT type, title, description, status, timestamp FROM projects ORDER BY timestamp DESC")
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving projects: {e}")
+            return []
+    
+    def update_project_status(self, title: str, status: str) -> bool:
+        """Update project status."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "UPDATE projects SET status = ? WHERE title = ?",
+                (status, title)
+            )
+            self.conn.commit()
+            logger.info(f"Project status updated: {title} -> {status}")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"Error updating project status: {e}")
+            return False
+    
+    # Operation operations
+    def add_operation(self, category: str, title: str, details: str) -> bool:
+        """Add a new operation log."""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO operations (category, title, details, timestamp) VALUES (?, ?, ?, ?)",
+                (category, title, details, timestamp)
+            )
+            self.conn.commit()
+            logger.info(f"Operation logged: {category} - {title}")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"Error adding operation: {e}")
+            return False
+    
+    def get_operations(self) -> List[Tuple[str, str, str, str]]:
+        """Retrieve all operations."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT category, title, details, timestamp FROM operations ORDER BY timestamp DESC")
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving operations: {e}")
+            return []
+    
+    # Continuity operations
+    def add_continuity_issue(self, issue: str) -> bool:
+        """Add a continuity issue."""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO continuity_log (timestamp, issue, resolved) VALUES (?, ?, 0)",
+                (timestamp, issue)
+            )
+            self.conn.commit()
+            logger.info(f"Continuity issue logged: {issue[:50]}...")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"Error adding continuity issue: {e}")
+            return False
+    
+    def get_continuity_issues(self, include_resolved: bool = False) -> List[Tuple[str, str, bool]]:
+        """Retrieve continuity issues."""
+        try:
+            cursor = self.conn.cursor()
+            if include_resolved:
+                cursor.execute("SELECT timestamp, issue, resolved FROM continuity_log ORDER BY timestamp DESC")
+            else:
+                cursor.execute("SELECT timestamp, issue, resolved FROM continuity_log WHERE resolved = 0 ORDER BY timestamp DESC")
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving continuity issues: {e}")
+            return []
+    
+    def close(self):
+        """Close database connection."""
+        if self.conn:
+            self.conn.close()
+            logger.info("Database connection closed")
+
+# --- ECHO PRIME DAEMON ---
+
+class EchoPrimeDaemon:
+    """AI-like decision-making system with learning capabilities."""
+    
+    def __init__(self, db_daemon: DatabaseDaemon, knowledge_file: str = KNOWLEDGE_BASE_FILE):
+        self.db = db_daemon
+        self.knowledge_file = knowledge_file
+        self.knowledge = self.load_knowledge_base()
+    
+    def load_knowledge_base(self) -> Dict:
+        """Load knowledge base from JSON file."""
+        if os.path.exists(self.knowledge_file):
+            try:
+                with open(self.knowledge_file, 'r') as f:
+                    knowledge = json.load(f)
+                logger.info("Knowledge base loaded")
+                return knowledge
+            except json.JSONDecodeError as e:
+                logger.error(f"Error loading knowledge base: {e}")
+                return self._create_default_knowledge_base()
+        else:
+            return self._create_default_knowledge_base()
+    
+    def _create_default_knowledge_base(self) -> Dict:
+        """Create default knowledge base structure."""
+        default = {
+            "rules": [
+                {
+                    "input": ["character", "new character", "add character"],
+                    "output": "Character creation detected. Ensure unique name and detailed description."
+                },
+                {
+                    "input": ["timeline", "event", "history"],
+                    "output": "Timeline event detected. Verify chronological consistency."
+                },
+                {
+                    "input": ["project", "new project", "start"],
+                    "output": "New project detected. Initialize project structure and logging."
+                }
+            ],
+            "memory": [],
+            "patterns": {}
+        }
+        self.save_knowledge_base(default)
+        return default
+    
+    def save_knowledge_base(self, knowledge: Optional[Dict] = None):
+        """Save knowledge base to JSON file."""
+        if knowledge is None:
+            knowledge = self.knowledge
+        
+        try:
+            with open(self.knowledge_file, 'w') as f:
+                json.dump(knowledge, f, indent=4)
+            logger.info("Knowledge base saved")
+        except Exception as e:
+            logger.error(f"Error saving knowledge base: {e}")
+    
+    def make_decision(self, data: str) -> str:
+        """Analyze data and make decision based on knowledge base."""
+        data_lower = data.lower()
+        
+        # Check against rules
+        for rule in self.knowledge["rules"]:
+            if any(term in data_lower for term in rule["input"]):
+                decision = rule["output"]
+                self._log_decision(data, decision)
+                return decision
+        
+        # Default response
+        default_decision = "No specific pattern detected. Proceed with standard logging."
+        self._log_decision(data, default_decision)
+        return default_decision
+    
+    def _log_decision(self, input_data: str, decision: str):
+        """Log decision to memory."""
+        memory_entry = {
+            "input": input_data,
+            "decision": decision,
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        self.knowledge["memory"].append(memory_entry)
+        
+        # Keep only last 100 memories
+        if len(self.knowledge["memory"]) > 100:
+            self.knowledge["memory"] = self.knowledge["memory"][-100:]
+        
+        self.save_knowledge_base()
+    
+    def get_memory(self) -> str:
+        """Get formatted memory log."""
+        if not self.knowledge["memory"]:
+            return "No decisions logged yet."
+        
+        memory_text = ""
+        for m in self.knowledge["memory"][-20:]:  # Last 20 entries
+            memory_text += f"[{m['timestamp']}]\n"
+            memory_text += f"Input: {m['input']}\n"
+            memory_text += f"Decision: {m['decision']}\n\n"
+        
+        return memory_text
+    
+    def learn_from_outcome(self, project_title: str, outcome: str):
+        """Learn from project outcomes."""
+        if outcome in ["success", "completed"]:
+            new_rule = {
+                "input": [project_title.lower()],
+                "output": f"Success pattern from '{project_title}'. Apply similar approach."
+            }
+            
+            # Check if rule already exists
+            if not any(r["input"] == new_rule["input"] for r in self.knowledge["rules"]):
+                self.knowledge["rules"].append(new_rule)
+                self.save_knowledge_base()
+                logger.info(f"Echo Prime learned from success: {project_title}")
+                
+# --- CONTINUITY DAEMON ---
+
+class ContinuityDaemon:
+    """Checks for continuity issues and inconsistencies."""
+    
+    def __init__(self, db_daemon: DatabaseDaemon):
+        self.db = db_daemon
+        self.known_entities = set()
+        self.common_words = {
+            "the", "a", "an", "is", "of", "and", "in", "with", "log", "new", 
+            "entry", "manifesto", "to", "at", "for", "system", "initialized", 
+            "meta", "reality", "logged", "daemon", "cosmic", "key", "prime",
+            "echo", "on", "this", "that", "has", "been", "was", "are", "by",
+            "be", "we", "by"
+        }
+        self.load_entities()
+    
+    def load_entities(self):
+        """Load all known entities from database."""
+        self.known_entities = set()
+        
+        # Add characters
+        for name, _ in self.db.get_characters():
+            self.known_entities.add(name.lower())
+        
+        # Add cards
+        for name, _, _ in self.db.get_cards():
+            self.known_entities.add(name.lower())
+        
+        # Add projects
+        for _, title, _, _, _ in self.db.get_projects():
+            self.known_entities.add(title.lower())
+        
+        logger.info("Continuity Daemon loaded known entities.")
+
+    def check_all_logs(self) -> List[str]:
+        """Perform a comprehensive check on all log data."""
+        issues = []
+        
+        # Check manifesto for unknown entities
+        for _, entry in self.db.get_manifesto_entries():
+            issues.extend(self.check_text_for_unknown_entities(entry, "Manifesto Log"))
+        
+        # Check timeline for unknown entities
+        for _, event in self.db.get_timeline():
+            issues.extend(self.check_text_for_unknown_entities(event, "Timeline"))
+        
+        # Check operations for unknown entities
+        for _, _, details, _ in self.db.get_operations():
+            issues.extend(self.check_text_for_unknown_entities(details, "Operations Log"))
+        
+        # Add more checks here, e.g., date consistency
+        
+        # Log and store unique issues
+        unique_issues = list(set(issues))
+        for issue in unique_issues:
+            self.db.add_continuity_issue(issue)
+
+        return unique_issues
+
+    def check_text_for_unknown_entities(self, text: str, source: str) -> List[str]:
+        """Check a block of text for entities not in the known set."""
+        issues = []
+        words = re.findall(r'\b\w+\b', text.lower())
+        
+        for word in words:
+            if len(word) > 2 and word not in self.common_words and word not in self.known_entities:
+                issues.append(f"Potential new entity '{word}' found in {source}.")
+                
+        return issues
+        
+# --- MAIN APPLICATION GUI ---
+
+class CosmicKeyMainWindow(QMainWindow):
+    """The main application window for Cosmic Key."""
+
+    def __init__(self, db_daemon, echo_daemon, continuity_daemon):
+        super().__init__()
+        self.db_daemon = db_daemon
+        self.echo_daemon = echo_daemon
+        self.continuity_daemon = continuity_daemon
+        
+        self.setWindowTitle("Cosmic Key - Meta Memory Log & Creative Project Manager")
+        self.setGeometry(100, 100, 1200, 800)
+        
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        
+        self.main_layout = QVBoxLayout()
+        self.central_widget.setLayout(self.main_layout)
+        
+        self.tabs = QTabWidget()
+        self.main_layout.addWidget(self.tabs)
+        
+        # Initialize UI components
+        self.setup_tabs()
+        
+        # Initial data load
+        self.load_all_data()
+        
+        # Run startup routines
+        self.run_startup_routines()
+        
+    def run_startup_routines(self):
+        """Perform initial setup tasks."""
+        ensure_directories()
+        backup_database()
+        logger.info("Cosmic Key system initialized.")
+
+    def setup_tabs(self):
+        """Create and add all functional tabs to the main window."""
+        self.tabs.addTab(self.create_manifesto_tab(), "Manifesto Log")
+        self.tabs.addTab(self.create_echo_tab(), "Meta-Memory")
+        self.tabs.addTab(self.create_characters_tab(), "Character Nexus")
+        self.tabs.addTab(self.create_timeline_tab(), "Temporal Timeline")
+        self.tabs.addTab(self.create_cards_tab(), "Resonance Cards")
+        self.tabs.addTab(self.create_projects_tab(), "Project Manager")
+        self.tabs.addTab(self.create_operations_tab(), "Operations Log")
+        self.tabs.addTab(self.create_continuity_tab(), "Continuity Core")
+    
+    def load_all_data(self):
+        """Load data into all relevant UI components."""
+        self.load_manifesto_entries()
+        self.load_characters()
+        self.load_timeline()
+        self.load_cards()
+        self.load_projects()
+        self.load_operations()
+        self.load_continuity_issues()
+
+    # --- Manifesto Tab ---
+    def create_manifesto_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        self.manifesto_input = QTextEdit()
+        self.manifesto_input.setPlaceholderText("Enter a new manifesto entry...")
+        layout.addWidget(self.manifesto_input)
+        
+        save_button = QPushButton("Log Manifesto Entry")
+        save_button.clicked.connect(self.save_manifesto_entry)
+        layout.addWidget(save_button)
+        
+        self.manifesto_display = QTextEdit()
+        self.manifesto_display.setReadOnly(True)
+        layout.addWidget(self.manifesto_display)
+        
+        tab.setLayout(layout)
+        return tab
+    
+    def save_manifesto_entry(self):
+        entry = self.manifesto_input.toPlainText().strip()
+        if not entry:
+            QMessageBox.warning(self, "Input Error", "Manifesto entry cannot be empty.")
+            return
+            
+        if self.db_daemon.add_manifesto_entry(entry):
+            self.manifesto_input.clear()
+            self.load_manifesto_entries()
+            self.log_operation("Manifesto", "New Entry", f"Added new entry: {entry[:50]}...")
+            QMessageBox.information(self, "Success", "Manifesto entry logged successfully.")
+        else:
+            QMessageBox.critical(self, "Database Error", "Failed to log manifesto entry.")
+
+    def load_manifesto_entries(self):
+        entries = self.db_daemon.get_manifesto_entries()
+        display_text = ""
+        for timestamp, entry in entries:
+            display_text += f"--- {timestamp} ---\n{entry}\n\n"
+        self.manifesto_display.setPlainText(display_text)
+
+    # --- Echo Tab ---
+    def create_echo_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        info_label = QLabel("Echo Prime's Meta-Memory Log:")
+        layout.addWidget(info_label)
+        
+        self.echo_display = QTextEdit()
+        self.echo_display.setReadOnly(True)
+        self.echo_display.setPlainText(self.echo_daemon.get_memory())
+        layout.addWidget(self.echo_display)
+        
+        tab.setLayout(layout)
+        return tab
+    
+    # --- Character Tab ---
+    def create_characters_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        form_layout = QGridLayout()
+        self.character_name_input = QLineEdit()
+        self.character_description_input = QTextEdit()
+        
+        form_layout.addWidget(QLabel("Character Name:"), 0, 0)
+        form_layout.addWidget(self.character_name_input, 0, 1)
+        form_layout.addWidget(QLabel("Description:"), 1, 0)
+        form_layout.addWidget(self.character_description_input, 1, 1)
+        
+        add_button = QPushButton("Add Character")
+        add_button.clicked.connect(self.add_character)
+        form_layout.addWidget(add_button, 2, 1)
+        
+        layout.addLayout(form_layout)
+        
+        self.character_display = QTextEdit()
+        self.character_display.setReadOnly(True)
+        layout.addWidget(self.character_display)
+        
+        tab.setLayout(layout)
+        return tab
+    
+    def add_character(self):
+        name = self.character_name_input.text().strip()
+        description = self.character_description_input.toPlainText().strip()
+        
+        if not name or not description:
+            QMessageBox.warning(self, "Input Error", "Name and description cannot be empty.")
+            return
+            
+        self.echo_daemon.make_decision(f"New character creation: {name}")
+        if self.db_daemon.add_character(name, description):
+            self.character_name_input.clear()
+            self.character_description_input.clear()
+            self.load_characters()
+            self.continuity_daemon.load_entities()
+            self.log_operation("Character Nexus", "New Character", f"Added character: {name}")
+            QMessageBox.information(self, "Success", f"Character '{name}' added successfully.")
+        else:
+            QMessageBox.critical(self, "Database Error", f"Failed to add character '{name}'. It might already exist.")
+
+    def load_characters(self):
+        characters = self.db_daemon.get_characters()
+        display_text = ""
+        for name, description in characters:
+            display_text += f"--- {name} ---\n{description}\n\n"
+        self.character_display.setPlainText(display_text)
+    
+    # --- Timeline Tab ---
+    def create_timeline_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        form_layout = QGridLayout()
+        self.timeline_date_input = QLineEdit(datetime.datetime.now().strftime("%Y-%m-%d"))
+        self.timeline_event_input = QTextEdit()
+        
+        form_layout.addWidget(QLabel("Date (YYYY-MM-DD):"), 0, 0)
+        form_layout.addWidget(self.timeline_date_input, 0, 1)
+        form_layout.addWidget(QLabel("Event:"), 1, 0)
+        form_layout.addWidget(self.timeline_event_input, 1, 1)
+        
+        add_button = QPushButton("Add Timeline Event")
+        add_button.clicked.connect(self.add_timeline_event)
+        form_layout.addWidget(add_button, 2, 1)
+        
+        layout.addLayout(form_layout)
+        
+        self.timeline_display = QTextEdit()
+        self.timeline_display.setReadOnly(True)
+        layout.addWidget(self.timeline_display)
+        
+        tab.setLayout(layout)
+        return tab
+
+    def add_timeline_event(self):
+        date = self.timeline_date_input.text().strip()
+        event = self.timeline_event_input.toPlainText().strip()
+        
+        if not date or not event:
+            QMessageBox.warning(self, "Input Error", "Date and event cannot be empty.")
+            return
+        
+        self.echo_daemon.make_decision(f"New timeline event: {event[:50]}...")
+        if self.db_daemon.add_timeline_event(date, event):
+            self.timeline_event_input.clear()
+            self.load_timeline()
+            self.log_operation("Timeline", "New Event", f"Added event on {date}")
+            QMessageBox.information(self, "Success", "Timeline event added successfully.")
+        else:
+            QMessageBox.critical(self, "Database Error", "Failed to add timeline event.")
+
+    def load_timeline(self):
+        events = self.db_daemon.get_timeline()
+        display_text = ""
+        for date, event in events:
+            display_text += f"--- {date} ---\n{event}\n\n"
+        self.timeline_display.setPlainText(display_text)
+
+    # --- Cards Tab ---
+    def create_cards_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        form_layout = QGridLayout()
+        self.card_name_input = QLineEdit()
+        self.card_ability_input = QTextEdit()
+        self.card_cost_input = QLineEdit()
+        
+        form_layout.addWidget(QLabel("Card Name:"), 0, 0)
+        form_layout.addWidget(self.card_name_input, 0, 1)
+        form_layout.addWidget(QLabel("Ability:"), 1, 0)
+        form_layout.addWidget(self.card_ability_input, 1, 1)
+        form_layout.addWidget(QLabel("Resonance Cost:"), 2, 0)
+        form_layout.addWidget(self.card_cost_input, 2, 1)
+        
+        add_button = QPushButton("Add Resonance Card")
+        add_button.clicked.connect(self.add_card)
+        form_layout.addWidget(add_button, 3, 1)
+        
+        layout.addLayout(form_layout)
+        
+        self.card_display = QTextEdit()
+        self.card_display.setReadOnly(True)
+        layout.addWidget(self.card_display)
+        
+        tab.setLayout(layout)
+        return tab
+    
+    def add_card(self):
+        name = self.card_name_input.text().strip()
+        ability = self.card_ability_input.toPlainText().strip()
+        cost = self.card_cost_input.text().strip()
+        
+        if not name:
+            QMessageBox.warning(self, "Input Error", "Card name cannot be empty.")
+            return
+            
+        if self.db_daemon.add_card(name, ability, cost):
+            self.card_name_input.clear()
+            self.card_ability_input.clear()
+            self.card_cost_input.clear()
+            self.load_cards()
+            self.continuity_daemon.load_entities()
+            self.log_operation("Resonance Cards", "New Card", f"Added card: {name}")
+            QMessageBox.information(self, "Success", f"Card '{name}' added successfully.")
+        else:
+            QMessageBox.critical(self, "Database Error", f"Failed to add card '{name}'. It might already exist.")
+            
+    def load_cards(self):
+        cards = self.db_daemon.get_cards()
+        display_text = ""
+        for name, ability, cost in cards:
+            display_text += f"--- {name} ---\nAbility: {ability}\nCost: {cost}\n\n"
+        self.card_display.setPlainText(display_text)
+    
+    # --- Projects Tab ---
+    def create_projects_tab(self):
+        tab = QWidget()
+        main_layout = QVBoxLayout()
+        
+        # Project creation form
+        create_group = QGroupBox("Create New Project")
+        create_layout = QGridLayout()
+        
+        self.project_title_input = QLineEdit()
+        self.project_description_input = QTextEdit()
+        self.project_type_combo = QComboBox()
+        self.project_type_combo.addItems(["Writing", "Music", "Game Design", "Other"])
+        
+        create_layout.addWidget(QLabel("Title:"), 0, 0)
+        create_layout.addWidget(self.project_title_input, 0, 1)
+        create_layout.addWidget(QLabel("Type:"), 1, 0)
+        create_layout.addWidget(self.project_type_combo, 1, 1)
+        create_layout.addWidget(QLabel("Description:"), 2, 0)
+        create_layout.addWidget(self.project_description_input, 2, 1)
+        
+        add_button = QPushButton("Create Project")
+        add_button.clicked.connect(self.create_project)
+        create_layout.addWidget(add_button, 3, 1)
+        
+        create_group.setLayout(create_layout)
+        main_layout.addWidget(create_group)
+        
+        # Project display
+        display_group = QGroupBox("Active Projects")
+        display_layout = QVBoxLayout()
+        self.project_display = QTextEdit()
+        self.project_display.setReadOnly(True)
+        display_layout.addWidget(self.project_display)
+        display_group.setLayout(display_layout)
+        main_layout.addWidget(display_group)
+        
+        # Project status update
+        status_group = QGroupBox("Update Project Status")
+        status_layout = QHBoxLayout()
+        self.project_select_combo = QComboBox()
+        self.project_status_combo = QComboBox()
+        self.project_status_combo.addItems(["active", "completed", "archived", "on-hold"])
+        update_button = QPushButton("Update Status")
+        update_button.clicked.connect(self.update_project_status)
+        
+        status_layout.addWidget(QLabel("Project:"))
+        status_layout.addWidget(self.project_select_combo)
+        status_layout.addWidget(QLabel("Status:"))
+        status_layout.addWidget(self.project_status_combo)
+        status_layout.addWidget(update_button)
+        status_group.setLayout(status_layout)
+        main_layout.addWidget(status_group)
+        
+        tab.setLayout(main_layout)
+        return tab
+        
+    def create_project(self):
+        title = self.project_title_input.text().strip()
+        description = self.project_description_input.toPlainText().strip()
+        project_type = self.project_type_combo.currentText()
+        
+        if not title:
+            QMessageBox.warning(self, "Input Error", "Project title cannot be empty.")
+            return
+            
+        self.echo_daemon.make_decision(f"New project '{title}' of type '{project_type}'")
+        if self.db_daemon.add_project(project_type, title, description):
+            self.project_title_input.clear()
+            self.project_description_input.clear()
+            self.load_projects()
+            self.continuity_daemon.load_entities()
+            self.log_operation("Project Manager", "New Project", f"Created project: {title}")
+            QMessageBox.information(self, "Success", f"Project '{title}' created successfully.")
+        else:
+            QMessageBox.critical(self, "Database Error", f"Failed to create project '{title}'.")
+
+    def update_project_status(self):
+        title = self.project_select_combo.currentText()
+        status = self.project_status_combo.currentText()
+        
+        if not title:
+            QMessageBox.warning(self, "Input Error", "No project selected.")
+            return
+            
+        if self.db_daemon.update_project_status(title, status):
+            if status in ["completed", "success"]:
+                self.echo_daemon.learn_from_outcome(title, status)
+            self.load_projects()
+            self.log_operation("Project Manager", "Update Status", f"Updated status of '{title}' to '{status}'")
+            QMessageBox.information(self, "Success", f"Status of '{title}' updated to '{status}'.")
+        else:
+            QMessageBox.critical(self, "Database Error", f"Failed to update status for '{title}'.")
+            
+    def load_projects(self):
+        projects = self.db_daemon.get_projects()
+        display_text = ""
+        self.project_select_combo.clear()
+        
+        for project_type, title, description, status, timestamp in projects:
+            display_text += f"--- {title} ({project_type}) ---\n"
+            display_text += f"Status: {status.upper()}\n"
+            display_text += f"Created: {timestamp}\n"
+            display_text += f"Description: {description}\n\n"
+            self.project_select_combo.addItem(title)
+            
+        self.project_display.setPlainText(display_text)
+        
+    # --- Operations Tab ---
+    def create_operations_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        self.operations_display = QTextEdit()
+        self.operations_display.setReadOnly(True)
+        layout.addWidget(self.operations_display)
+        
+        tab.setLayout(layout)
+        return tab
+
+    def log_operation(self, category, title, details):
+        """Logs an operation and updates the display."""
+        self.db_daemon.add_operation(category, title, details)
+        self.load_operations()
+        
+    def load_operations(self):
+        operations = self.db_daemon.get_operations()
+        display_text = ""
+        for category, title, details, timestamp in operations:
+            display_text += f"[{timestamp}] - {category}: {title}\n"
+            if details:
+                display_text += f"  - Details: {details}\n"
+            display_text += "\n"
+        self.operations_display.setPlainText(display_text)
+        self.echo_display.setPlainText(self.echo_daemon.get_memory()) # Update Echo log too
+
+    # --- Continuity Tab ---
+    def create_continuity_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        input_group = QGroupBox("Log New Continuity Issue")
+        input_layout = QHBoxLayout()
+        self.continuity_issue_input = QLineEdit()
+        log_button = QPushButton("Log Issue")
+        log_button.clicked.connect(self.log_continuity_issue)
+        input_layout.addWidget(self.continuity_issue_input)
+        input_layout.addWidget(log_button)
+        input_group.setLayout(input_layout)
+        layout.addWidget(input_group)
+        
+        display_group = QGroupBox("Unresolved Issues")
+        display_layout = QVBoxLayout()
+        self.continuity_display = QTextEdit()
+        self.continuity_display.setReadOnly(True)
+        display_layout.addWidget(self.continuity_display)
+        display_group.setLayout(display_layout)
+        layout.addWidget(display_group)
+        
+        tab.setLayout(layout)
+        
+        # Start the continuity check in a background thread
+        self.check_continuity_thread = ContinuityCheckThread(self.continuity_daemon)
+        self.check_continuity_thread.issue_found.connect(self.handle_continuity_issue)
+        self.check_continuity_thread.start()
+        
+        return tab
+
+    def log_continuity_issue(self):
+        issue = self.continuity_issue_input.text().strip()
+        if not issue:
+            QMessageBox.warning(self, "Input Error", "Issue description cannot be empty.")
+            return
+            
+        if self.db_daemon.add_continuity_issue(issue):
+            self.continuity_issue_input.clear()
+            self.load_continuity_issues()
+            QMessageBox.information(self, "Success", "Continuity issue logged.")
+        else:
+            QMessageBox.critical(self, "Database Error", "Failed to log issue.")
+            
+    def load_continuity_issues(self):
+        issues = self.db_daemon.get_continuity_issues()
+        display_text = ""
+        if not issues:
+            display_text = "No unresolved continuity issues."
+        for timestamp, issue, resolved in issues:
+            display_text += f"[{timestamp}] - {issue}\n"
+            
+        self.continuity_display.setPlainText(display_text)
+
+    def handle_continuity_issue(self, message):
+        """Handle a detected continuity issue."""
+        QMessageBox.warning(self, "Continuity Alert", f"Potential continuity issue detected: {message}")
+        self.log_operation("Continuity Core", "Issue Detected", message)
+        self.load_continuity_issues()
+
+# --- BACKGROUND THREADS ---
+# This is a key improvement for a production-ready app.
+# It prevents the UI from freezing during long-running tasks.
+
+class ContinuityCheckThread(QThread):
+    """Background thread to periodically check for continuity issues."""
+    issue_found = pyqtSignal(str)
+
+    def __init__(self, continuity_daemon):
+        super().__init__()
+        self.continuity_daemon = continuity_daemon
+
+    def run(self):
+        while True:
+            issues = self.continuity_daemon.check_all_logs()
+            for issue in issues:
+                self.issue_found.emit(issue)
+            self.msleep(600000) # Check every 10 minutes
+
+# --- Main Application Entry Point ---
+def main():
+    """Main function to start the application."""
+    # Ensure all necessary files and folders are in place.
+    ensure_directories()
+    
+    # Initialize the database daemon
+    db = DatabaseDaemon(DATABASE_FILE)
+    
+    # Initialize other daemons
+    echo = EchoPrimeDaemon(db)
+    continuity = ContinuityDaemon(db)
+    
+    # Initialize and run the application
+    app = QApplication(sys.argv)
+    window = CosmicKeyMainWindow(db, echo, continuity)
+    window.show()
+    
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()
