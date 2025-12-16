@@ -40,6 +40,17 @@ DESTINATIONS = {
     ".py": "mcp-servers",
     ".js": "classes",
     ".ts": "classes",
+    # Archives
+    ".zip": "archives",
+    ".rar": "archives",
+    ".7z": "archives",
+    ".tar": "archives",
+    ".gz": "archives",
+    # Executables
+    ".exe": "executables",
+    ".msi": "executables",
+    ".bat": "executables",
+    ".sh": "executables",
 }
 
 # Subfolders to create if missing
@@ -116,9 +127,20 @@ def process_raw_data(source_dir):
     dupe_count = 0
 
     for root, dirs, files in os.walk(source_dir):
+        # Modify dirs in-place to skip target folders at the base level
+        # This prevents the sorter from trying to sort its own output folders if they are inside source_dir
+        if root == source_dir:
+            for dest_folder in set(DESTINATIONS.values()):
+                if dest_folder in dirs:
+                    dirs.remove(dest_folder)
+
         for file in files:
             processed_count += 1
             src_path = os.path.join(root, file)
+
+            # Skip the script itself if it's in the source directory
+            if file == os.path.basename(__file__):
+                continue
 
             # Check Hash
             file_hash = calculate_hash(src_path)
@@ -128,22 +150,22 @@ def process_raw_data(source_dir):
             if file_hash in existing_hashes:
                 print(f"[DUPLICATE] {file} exists at {existing_hashes[file_hash]}")
                 # Optional: Delete duplicate in source?
-                # os.remove(src_path)
+                os.remove(src_path)  # Delete the duplicate from the source folder
                 dupe_count += 1
                 continue
 
             # Organize
             ext = os.path.splitext(file)[1].lower()
-            dest_folder = DESTINATIONS.get(ext, "extras")  # Default to 'extras'
+            dest_folder_name = DESTINATIONS.get(ext, "extras")  # Default to 'extras'
 
-            dest_path = os.path.join(PROJECT_ROOT, dest_folder, file)
+            dest_path = os.path.join(PROJECT_ROOT, dest_folder_name, file)
 
             # Handle filename collision (same name, different content)
             if os.path.exists(dest_path):
                 name, extension = os.path.splitext(file)
                 timestamp = int(time.time())
                 dest_path = os.path.join(
-                    PROJECT_ROOT, dest_folder, f"{name}_{timestamp}{extension}"
+                    PROJECT_ROOT, dest_folder_name, f"{name}_{timestamp}{extension}"
                 )
 
             # Ensure extras dir exists if needed
