@@ -13,7 +13,8 @@ echo [3] Sync to GitLab
 echo [4] Push TO Wormhole (Repo -> Drive)
 echo [5] Import FROM Wormhole (Drive -> Repo)
 echo [6] Awaken (Harvest Knowledge from Data)
-echo [7] System Status Check
+echo [7] Organize Raw Data (Dedupe & Sort)
+echo [8] System Status Check
 echo.
 set /p choice="Select activation mode: "
 if "%choice%"=="1" goto webapp
@@ -22,7 +23,8 @@ if "%choice%"=="3" goto gitlab
 if "%choice%"=="4" goto pushtowormhole
 if "%choice%"=="5" goto importfromwormhole
 if "%choice%"=="6" goto awaken
-if "%choice%"=="7" goto status
+if "%choice%"=="7" goto sortdata
+if "%choice%"=="8" goto status
 goto end
 
 :webapp
@@ -74,6 +76,16 @@ goto end
 echo.
 echo Initiating Knowledge Harvest...
 python "%~dp0knowledge_harvester.py"
+pause
+goto end
+
+:sortdata
+echo.
+echo Organizing Raw Data...
+echo Tip: Your dump folder is likely '...[Wormhole]\mother-brain\temporal_raw_data'
+set /p rawpath="Enter full path to source folder (Press Enter to check local project): "
+if "%rawpath%"=="" set rawpath=%~dp0temporal_raw_data
+python "%~dp0temporal_sorter.py" "%rawpath%"
 pause
 goto end
 
